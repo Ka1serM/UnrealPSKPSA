@@ -91,7 +91,7 @@ UObject* UPSKFactory::Import(const FString Filename, UObject* Parent, const FNam
 		auto PskBonePos = PskBone.BonePos;
 		FTransform3f PskTransform;
 		PskTransform.SetLocation(FVector3f(PskBonePos.Position.X, -PskBonePos.Position.Y, PskBonePos.Position.Z));
-		PskTransform.SetRotation(FQuat4f(PskBonePos.Orientation.X, -PskBonePos.Orientation.Y, PskBonePos.Orientation.Z, PskBonePos.Orientation.W).GetNormalized());
+		PskTransform.SetRotation(FQuat4f(-PskBonePos.Orientation.X, PskBonePos.Orientation.Y, -PskBonePos.Orientation.Z, (PskBone.ParentIndex == -1) ? PskBonePos.Orientation.W : -PskBonePos.Orientation.W).GetNormalized());
 
 		SkeletalMeshImportData::FJointPos BonePos;
 		BonePos.Transform = PskTransform;
