@@ -62,8 +62,8 @@ UObject* UPSAFactory::FactoryCreateFile(UClass* Class, UObject* Parent, FName Na
         SettingsImporter->bInitialized = true;
     }
 
-	auto Psa = PSAReader(Filename);
-	if (!Psa.Read()) return nullptr;
+	auto Data = PSAReader(Filename);
+	if (!Data.Read()) return nullptr;
 
 	UAnimSequence* AnimSequence = NewObject<UAnimSequence>(Parent, UAnimSequence::StaticClass(), Name, Flags);
 	USkeleton* Skeleton = SettingsImporter->Skeleton;
@@ -73,19 +73,19 @@ UObject* UPSAFactory::FactoryCreateFile(UClass* Class, UObject* Parent, FName Na
 	AnimSequence->GetController().InitializeModel();
 	AnimSequence->ResetAnimation();
 	
-	auto Info = Psa.AnimInfo;
+	auto Info = Data.AnimInfo;
 	
 	AnimSequence->GetController().SetFrameRate(FFrameRate(Info.AnimRate, 1));
 	AnimSequence->GetController().SetNumberOfFrames(FFrameNumber(Info.NumRawFrames));
 
 	
-	FScopedSlowTask ImportTask(Psa.Bones.Num(), FText::FromString("Importing Anim"));
+	FScopedSlowTask ImportTask(Data.Bones.Num(), FText::FromString("Importing Anim"));
 	ImportTask.MakeDialog(false);
-	for (auto BoneIndex = 0; BoneIndex < Psa.Bones.Num(); BoneIndex++)
+	for (auto BoneIndex = 0; BoneIndex < Data.Bones.Num(); BoneIndex++)
 	{
-		auto Bone = Psa.Bones[BoneIndex];
+		auto Bone = Data.Bones[BoneIndex];
 		auto BoneName = FName(Bone.Name);
-		ImportTask.DefaultMessage = FText::FromString(FString::Printf(TEXT("Bone %s: %d/%d"), *BoneName.ToString(), BoneIndex+1, Psa.Bones.Num()));
+		ImportTask.DefaultMessage = FText::FromString(FString::Printf(TEXT("Bone %s: %d/%d"), *BoneName.ToString(), BoneIndex+1, Data.Bones.Num()));
 		ImportTask.EnterProgressFrame();
 		
 		TArray<FVector3f> PositionalKeys;
@@ -93,13 +93,13 @@ UObject* UPSAFactory::FactoryCreateFile(UClass* Class, UObject* Parent, FName Na
 		TArray<FVector3f> ScaleKeys;
 		for (auto Frame = 0; Frame < Info.NumRawFrames; Frame++)
 		{
-			auto KeyIndex = BoneIndex + Frame * Psa.Bones.Num();
-			auto AnimKey = Psa.AnimKeys[KeyIndex];
+			auto KeyIndex = BoneIndex + Frame * Data.Bones.Num();
+			auto AnimKey = Data.AnimKeys[KeyIndex];
 
 			UE_LOG(LogTemp, Warning, TEXT(" Position %s"), *AnimKey.Position.ToString());
 			PositionalKeys.Add(FVector3f(AnimKey.Position.X, -AnimKey.Position.Y, AnimKey.Position.Z));
 			RotationalKeys.Add(FQuat4f(-AnimKey.Orientation.X, AnimKey.Orientation.Y, -AnimKey.Orientation.Z, (BoneIndex == 0) ? AnimKey.Orientation.W : -AnimKey.Orientation.W).GetNormalized());
-			ScaleKeys.Add(Psa.bHasScaleKeys ? Psa.ScaleKeys[KeyIndex].ScaleVector : FVector3f::OneVector);
+			ScaleKeys.Add(Data.bHasScaleKeys ? Data.ScaleKeys[KeyIndex].ScaleVector : FVector3f::OneVector);
 
 		}
 

@@ -6,8 +6,12 @@
 #include "Readers/PSKReader.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Engine/SkinnedAssetCommon.h"
+#include "Materials/MaterialInstanceConstant.h"
 #include "Rendering/SkeletalMeshLODModel.h"
 #include "Rendering/SkeletalMeshModel.h"
+
+/* UTextAssetFactory structors
+ *****************************************************************************/
 
 UPSKFactory::UPSKFactory( const FObjectInitializer& ObjectInitializer )
 	: Super(ObjectInitializer)
@@ -18,38 +22,43 @@ UPSKFactory::UPSKFactory( const FObjectInitializer& ObjectInitializer )
 	bEditorImport = true;
 }
 
+/* UFactory overrides
+ *****************************************************************************/
+
 UObject* UPSKFactory::FactoryCreateFile(UClass* Class, UObject* Parent, FName Name, EObjectFlags Flags, const FString& Filename, const TCHAR* Params, FFeedbackContext* Warn, bool& bOutOperationCanceled)
 {
-	auto Psk = PSKReader(Filename);
-	if (!Psk.Read()) return nullptr;
+	auto Data = PSKReader(Filename);
+	if (!Data.Read()) return nullptr;
 
-	TArray<FColor> PointVertexColors;
-	PointVertexColors.Init(FColor::White, Psk.VertexColors.Num());
-	if (Psk.bHasVertexColors)
+	TArray<FColor> VertexColorsByPoint;
+	VertexColorsByPoint.Init(FColor::Black, Data.VertexColors.Num());
+	if (Data.bHasVertexColors)
 	{
-		for (auto i = 0; i < Psk.Wedges.Num(); i++)
+		for (auto i = 0; i < Data.Wedges.Num(); i++)
 		{
-			auto FixedColor = Psk.VertexColors[i];
+			auto FixedColor = Data.VertexColors[i];
 			Swap(FixedColor.R, FixedColor.B);
-			PointVertexColors[Psk.Wedges[i].PointIndex] = FixedColor;
+			VertexColorsByPoint[Data.Wedges[i].PointIndex] = FixedColor;
 		}
 	}
 	
 	FSkeletalMeshImportData SkeletalMeshImportData;
 
-	for (auto i = 0; i < Psk.Normals.Num(); i++)
-		Psk.Normals[i].Y = -Psk.Normals[i].Y;
+	for (auto i = 0; i < Data.Normals.Num(); i++)
+	{
+		Data.Normals[i].Y = -Data.Normals[i].Y; // MIRROR_MESH
+	}
 
-	for (auto Vertex : Psk.Vertices)
+	for (auto Vertex : Data.Vertices)
 	{
 		auto FixedVertex = Vertex;
-		FixedVertex.Y = -FixedVertex.Y;
+		FixedVertex.Y = -FixedVertex.Y; // MIRROR_MESH
 		SkeletalMeshImportData.Points.Add(FixedVertex);
 		SkeletalMeshImportData.PointToRawMap.Add(SkeletalMeshImportData.Points.Num()-1);
 	}
 	
 	auto WindingOrder = {2, 1, 0};
-	for (const auto PskFace : Psk.Faces)
+	for (const auto PskFace : Data.Faces)
 	{
 		SkeletalMeshImportData::FTriangle Face;
 		Face.MatIndex = PskFace.MatIndex;
@@ -59,25 +68,23 @@ UObject* UPSKFactory::FactoryCreateFile(UClass* Class, UObject* Parent, FName Na
 		for (auto VertexIndex : WindingOrder)
 		{
 			const auto WedgeIndex = PskFace.WedgeIndex[VertexIndex];
-			const auto PskWedge = Psk.Wedges[WedgeIndex];
+			const auto PskWedge = Data.Wedges[WedgeIndex];
 			
 			SkeletalMeshImportData::FVertex Wedge;
 			Wedge.MatIndex = PskWedge.MatIndex;
 			Wedge.VertexIndex = PskWedge.PointIndex;
-			Wedge.Color = Psk.bHasVertexColors ? PointVertexColors[PskWedge.PointIndex] : FColor::White;
+			Wedge.Color = Data.bHasVertexColors ? VertexColorsByPoint[PskWedge.PointIndex] : FColor::Black;
 			Wedge.UVs[0] = FVector2f(PskWedge.U, PskWedge.V);
-			for (auto UVIdx = 0; UVIdx < Psk.ExtraUVs.Num(); UVIdx++)
+			for (auto UVIdx = 0; UVIdx < Data.ExtraUVs.Num(); UVIdx++)
 			{
-				auto UV =  Psk.ExtraUVs[UVIdx][PskFace.WedgeIndex[VertexIndex]];
+				auto UV =  Data.ExtraUVs[UVIdx][PskFace.WedgeIndex[VertexIndex]];
 				Wedge.UVs[UVIdx+1] = UV;
 			}
 			
 			Face.WedgeIndex[VertexIndex] = SkeletalMeshImportData.Wedges.Add(Wedge);
-			Face.TangentZ[VertexIndex] = Psk.bHasVertexNormals ? Psk.Normals[PskWedge.PointIndex] : FVector3f::ZeroVector;
+			Face.TangentZ[VertexIndex] = Data.bHasVertexNormals ? Data.Normals[PskWedge.PointIndex] : FVector3f::ZeroVector;
 			Face.TangentY[VertexIndex] = FVector3f::ZeroVector;
 			Face.TangentX[VertexIndex] = FVector3f::ZeroVector;
-
-			
 		}
 		Swap(Face.WedgeIndex[0], Face.WedgeIndex[2]);
 		Swap(Face.TangentZ[0], Face.TangentZ[2]);
@@ -85,17 +92,20 @@ UObject* UPSKFactory::FactoryCreateFile(UClass* Class, UObject* Parent, FName Na
 		SkeletalMeshImportData.Faces.Add(Face);
 	}
 
-	for (auto PskBone : Psk.Bones)
+	TArray<FString> AddedBoneNames;
+	for (auto PskBone : Data.Bones)
 	{
 		SkeletalMeshImportData::FBone Bone;
 		Bone.Name = PskBone.Name;
+		if (AddedBoneNames.Contains(Bone.Name)) continue;
+		
 		Bone.NumChildren = PskBone.NumChildren;
 		Bone.ParentIndex = PskBone.ParentIndex == -1 ? INDEX_NONE : PskBone.ParentIndex;
 		
 		auto PskBonePos = PskBone.BonePos;
 		FTransform3f PskTransform;
 		PskTransform.SetLocation(FVector3f(PskBonePos.Position.X, -PskBonePos.Position.Y, PskBonePos.Position.Z));
-		PskTransform.SetRotation(FQuat4f(-PskBonePos.Orientation.X, PskBonePos.Orientation.Y, -PskBonePos.Orientation.Z, (PskBone.ParentIndex == -1) ? PskBonePos.Orientation.W : -PskBonePos.Orientation.W).GetNormalized());
+		PskTransform.SetRotation(FQuat4f(PskBonePos.Orientation.X, -PskBonePos.Orientation.Y, PskBonePos.Orientation.Z, PskBonePos.Orientation.W).GetNormalized());
 
 		SkeletalMeshImportData::FJointPos BonePos;
 		BonePos.Transform = PskTransform;
@@ -106,9 +116,10 @@ UObject* UPSKFactory::FactoryCreateFile(UClass* Class, UObject* Parent, FName Na
 
 		Bone.BonePos = BonePos;
 		SkeletalMeshImportData.RefBonesBinary.Add(Bone);
+		AddedBoneNames.Add(Bone.Name);
 	}
 
-	for (auto PskInfluence : Psk.Influences)
+	for (auto PskInfluence : Data.Influences)
 	{
 		SkeletalMeshImportData::FRawBoneInfluence Influence;
 		Influence.BoneIndex = PskInfluence.BoneIdx;
@@ -117,22 +128,22 @@ UObject* UPSKFactory::FactoryCreateFile(UClass* Class, UObject* Parent, FName Na
 		SkeletalMeshImportData.Influences.Add(Influence);
 	}
 
-	for (auto PskMaterial : Psk.Materials)
+	for (auto PskMaterial : Data.Materials)
 	{
 		SkeletalMeshImportData::FMaterial Material;
 		Material.MaterialImportName = PskMaterial.MaterialName;
-
-		auto MaterialAdd = FActorXUtils::LocalFindOrCreate<UMaterial>(UMaterial::StaticClass(), Parent, PskMaterial.MaterialName, Flags);
+		auto MaterialAdd = FActorXUtils::LocalFindOrCreate<UMaterialInstanceConstant>(UMaterialInstanceConstant::StaticClass(), Parent, PskMaterial.MaterialName, Flags);
 		Material.Material = MaterialAdd;
 		SkeletalMeshImportData.Materials.Add(Material);
 	}
+	
 	SkeletalMeshImportData.MaxMaterialIndex = SkeletalMeshImportData.Materials.Num()-1;
 
 	SkeletalMeshImportData.bDiffPose = false;
-	SkeletalMeshImportData.bHasNormals = Psk.bHasVertexNormals;
+	SkeletalMeshImportData.bHasNormals = Data.bHasVertexNormals;
 	SkeletalMeshImportData.bHasTangents = false;
 	SkeletalMeshImportData.bHasVertexColors = true;
-	SkeletalMeshImportData.NumTexCoords = 1 + Psk.ExtraUVs.Num(); 
+	SkeletalMeshImportData.NumTexCoords = 1 + Data.ExtraUVs.Num(); 
 	SkeletalMeshImportData.bUseT0AsRefPose = false;
 	
 	const auto Skeleton = FActorXUtils::LocalCreate<USkeleton>(USkeleton::StaticClass(), Parent,  Name.ToString().Append("_Skeleton"), Flags);
@@ -150,8 +161,8 @@ UObject* UPSKFactory::FactoryCreateFile(UClass* Class, UObject* Parent, FName Na
 
 	FSkeletalMeshLODModel LODModel;
 	LODModel.NumTexCoords = FMath::Max<uint32>(1, SkeletalMeshImportData.NumTexCoords);
-
-	const auto SkeletalMesh = NewObject<USkeletalMesh>(Parent, USkeletalMesh::StaticClass(), Name, Flags);
+	
+	const auto SkeletalMesh = FActorXUtils::LocalCreate<USkeletalMesh>(USkeletalMesh::StaticClass(), Parent, Name.ToString(), Flags);
 	SkeletalMesh->PreEditChange(nullptr);
 	SkeletalMesh->InvalidateDeriveDataCacheGUID();
 	SkeletalMesh->UnregisterAllMorphTarget();
@@ -177,7 +188,7 @@ UObject* UPSKFactory::FactoryCreateFile(UClass* Class, UObject* Parent, FName Na
 	SkeletalMesh->SaveLODImportedData(0, SkeletalMeshImportData);
 	FSkeletalMeshBuildSettings BuildOptions;
 	BuildOptions.bRemoveDegenerates = true;
-	BuildOptions.bRecomputeNormals = !Psk.bHasVertexNormals;
+	BuildOptions.bRecomputeNormals = !Data.bHasVertexNormals;
 	BuildOptions.bRecomputeTangents = true;
 	BuildOptions.bUseMikkTSpace = true;
 	SkeletalMesh->GetLODInfo(0)->BuildSettings = BuildOptions;
@@ -196,6 +207,8 @@ UObject* UPSKFactory::FactoryCreateFile(UClass* Class, UObject* Parent, FName Na
 		SkeletalMesh->GetMaterials().Add(FSkeletalMaterial(Material.Material.Get()));
 	}
 
+	// morphdata here
+	
 	SkeletalMesh->PostEditChange();
 	
 	SkeletalMesh->SetSkeleton(Skeleton);

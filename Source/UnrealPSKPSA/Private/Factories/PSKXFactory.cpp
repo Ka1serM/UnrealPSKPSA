@@ -8,7 +8,12 @@
 #include "Editor/UnrealEd/Classes/Factories/MaterialInstanceConstantFactoryNew.h"
 #include "EditorAssetLibrary.h"
 #include "AssetToolsModule.h"
+#include "ComponentReregisterContext.h"
 #include "IAssetTools.h"
+#include "Utils/ActorXUtils.h"
+
+/* UTextAssetFactory structors
+ *****************************************************************************/
 
 UPSKXFactory::UPSKXFactory( const FObjectInitializer& ObjectInitializer )
 	: Super(ObjectInitializer)
@@ -19,100 +24,67 @@ UPSKXFactory::UPSKXFactory( const FObjectInitializer& ObjectInitializer )
 	bEditorImport = true;
 }
 
+/* UFactory overrides
+ *****************************************************************************/
+
 UObject* UPSKXFactory::FactoryCreateFile(UClass* Class, UObject* Parent, FName Name, EObjectFlags Flags, const FString& Filename, const TCHAR* Params, FFeedbackContext* Warn, bool& bOutOperationCanceled)
 {
-	const auto Reader = new PSKReader(Filename);
-	if (!Reader->Read())
+	auto Data = PSKReader(Filename);
+	if (!Data.Read()) return nullptr;
+	
+	TArray<FColor> VertexColorsByPoint;
+	VertexColorsByPoint.Init(FColor::Black, Data.VertexColors.Num());
+	if (Data.bHasVertexColors)
 	{
-		return nullptr;
-	}
-	auto bHasNormals = Reader->Normals.Num() > 0;
-	auto bHasVertexColors = Reader->VertexColors.Num() > 0;
-
-	TArray<FColor> FaceVertexColors;
-	FaceVertexColors.Init(FColor::White, Reader->VertexColors.Num());
-	if (bHasVertexColors)
-	{
-		for (auto i = 0; i < Reader->Wedges.Num(); i++)
+		for (auto i = 0; i < Data.Wedges.Num(); i++)
 		{
-			auto FixedColor = Reader->VertexColors[i];
+			auto FixedColor = Data.VertexColors[i];
 			Swap(FixedColor.R, FixedColor.B);
-			FaceVertexColors[Reader->Wedges[i].PointIndex] = FixedColor;
+			VertexColorsByPoint[Data.Wedges[i].PointIndex] = FixedColor;
 		}
 	}
+	
 	auto RawMesh = FRawMesh();
-	for (auto Vertex : Reader->Vertices)
+	for (auto Vertex : Data.Vertices)
 	{
 		auto FixedVertex = Vertex;
-		FixedVertex.Y = -FixedVertex.Y; // mirror y axis cuz ue dumb dumb
+		FixedVertex.Y = -FixedVertex.Y; // MIRROR_MESH
 		RawMesh.VertexPositions.Add(FixedVertex);
 	}
 
-	for (const auto Face : Reader->Faces)
+	auto WindingOrder = {2, 1, 0};
+	for (const auto PskFace : Data.Faces)
 	{
-		for (auto VtxIdx = 2; VtxIdx >= 0; VtxIdx--) // reverse face winding to account for -y vertex pos
+		RawMesh.FaceMaterialIndices.Add(PskFace.MatIndex);
+		RawMesh.FaceSmoothingMasks.Add(1);
+
+		for (auto VertexIndex : WindingOrder)
 		{
-			const auto Wedge = Reader->Wedges[Face.WedgeIndex[VtxIdx]];
+			const auto WedgeIndex = PskFace.WedgeIndex[VertexIndex];
+			const auto PskWedge = Data.Wedges[WedgeIndex];
 
-			RawMesh.WedgeIndices.Add(Wedge.PointIndex);
-			RawMesh.WedgeTexCoords[0].Add(FVector2f(Wedge.U, Wedge.V));
-
-			for (auto UVIdx = 0; UVIdx < Reader->ExtraUVs.Num(); UVIdx++)
+			RawMesh.WedgeIndices.Add(PskWedge.PointIndex);
+			RawMesh.WedgeColors.Add(Data.bHasVertexColors ? VertexColorsByPoint[PskWedge.PointIndex] : FColor::Black);
+			RawMesh.WedgeTexCoords[0].Add(FVector2f(PskWedge.U, PskWedge.V));
+			for (auto UVIndex = 0; UVIndex < Data.ExtraUVs.Num(); UVIndex++)
 			{
-				auto UV = Reader->ExtraUVs[UVIdx][Face.WedgeIndex[VtxIdx]];
-				RawMesh.WedgeTexCoords[UVIdx+1].Add(UV);
+				auto UV =  Data.ExtraUVs[UVIndex][PskFace.WedgeIndex[VertexIndex]];
+				RawMesh.WedgeTexCoords[UVIndex+1].Add(UV);
 			}
-
-			auto Normal = FVector3f::ZeroVector;
-
-			if (bHasNormals)
-			{
-				Normal = Reader->Normals[Wedge.PointIndex];
-				Normal.Y = -Normal.Y;
-			}
-
-			RawMesh.WedgeTangentZ.Add(Normal);
+			
+			RawMesh.WedgeTangentZ.Add(Data.bHasVertexNormals ? Data.Normals[PskWedge.PointIndex] * FVector3f(1, -1, 1) : FVector3f::ZeroVector);
 			RawMesh.WedgeTangentY.Add(FVector3f::ZeroVector);
 			RawMesh.WedgeTangentX.Add(FVector3f::ZeroVector);
-
-			if (bHasVertexColors) RawMesh.WedgeColors.Add(FaceVertexColors[Wedge.PointIndex]);
 		}
-		
-		RawMesh.FaceMaterialIndices.Add(Face.MatIndex);
-		RawMesh.FaceSmoothingMasks.Add(1);
 	}
 
 	const auto StaticMesh = CastChecked<UStaticMesh>(CreateOrOverwriteAsset(UStaticMesh::StaticClass(), Parent, Name, Flags));
-	for (auto i = 0; i < Reader->Materials.Num(); i++)
+	
+	for (auto i = 0; i < Data.Materials.Num(); i++)
 	{
-		auto Material = Reader->Materials[i];
-		auto MaterialName = FName(Material.MaterialName);
-		auto MaterialNamey = FString(Material.MaterialName);
-		FString NewPathMat = "/Game/ValorantContent/Materials/";
-		IAssetTools& AssetTools = FModuleManager::GetModuleChecked<FAssetToolsModule>("AssetTools").Get();
-		UMaterialInstanceConstantFactoryNew* Factory = NewObject<UMaterialInstanceConstantFactoryNew>();
-		auto singpath = FPaths::Combine(NewPathMat, MaterialNamey);
-		UObject* CheckAsset = UEditorAssetLibrary::LoadAsset(singpath);
-		if (CheckAsset == nullptr)
-		{
-			CheckAsset = AssetTools.CreateAsset(MaterialNamey, NewPathMat, UMaterialInstanceConstant::StaticClass(), Factory);
-			TArray< FStringFormatArg > args;
-			args.Add(FStringFormatArg(MaterialNamey));
-			FString PathMat = FString::Format(TEXT("/Game/ValorantContent/Materials/{0}.{0}"), args);
-			auto Asset = UEditorAssetLibrary::LoadAsset(PathMat);
-			UMaterialInstanceConstant* MaterialInstance = CastChecked<UMaterialInstanceConstant>(Asset);
-			MaterialInstance->MarkPackageDirty();
-			FStaticMaterial StaticMaterial;
-			StaticMaterial.MaterialInterface = MaterialInstance;
-			StaticMesh->GetStaticMaterials().Add(StaticMaterial);
-			StaticMesh->GetSectionInfoMap().Set(0, i, FMeshSectionInfo(i));
-			continue;
-		}
-		UMaterialInstanceConstant* MaterialInstance = CastChecked<UMaterialInstanceConstant>(CheckAsset);
-		MaterialInstance->MarkPackageDirty();
-		FStaticMaterial StaticMaterial;
-		StaticMaterial.MaterialInterface = MaterialInstance;
-		StaticMesh->GetStaticMaterials().Add(StaticMaterial);
+		auto PskMaterial = Data.Materials[i];
+		auto MaterialAdd = FActorXUtils::LocalFindOrCreate<UMaterialInstanceConstant>(UMaterialInstanceConstant::StaticClass(), Parent, PskMaterial.MaterialName, Flags);
+		StaticMesh->GetStaticMaterials().Add(FStaticMaterial(MaterialAdd));
 		StaticMesh->GetSectionInfoMap().Set(0, i, FMeshSectionInfo(i));
 	}
 	
@@ -121,13 +93,16 @@ UObject* UPSKXFactory::FactoryCreateFile(UClass* Class, UObject* Parent, FName N
 	SourceModel.BuildSettings.bRecomputeTangents = false;
 	SourceModel.BuildSettings.bGenerateLightmapUVs = false;
 	SourceModel.BuildSettings.bComputeWeightedNormals = false;
-	SourceModel.BuildSettings.bRecomputeNormals = !bHasNormals;
+	SourceModel.BuildSettings.bRecomputeNormals = !Data.bHasVertexNormals;
 	SourceModel.SaveRawMesh(RawMesh);
 
 	StaticMesh->Build();
 	StaticMesh->PostEditChange();
 	FAssetRegistryModule::AssetCreated(StaticMesh);
 	StaticMesh->MarkPackageDirty();
+
+	FGlobalComponentReregisterContext RecreateComponents;
+	
 	return StaticMesh;
 }
 
