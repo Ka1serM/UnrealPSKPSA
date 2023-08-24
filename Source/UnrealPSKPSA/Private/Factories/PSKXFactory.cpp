@@ -83,7 +83,7 @@ UObject* UPSKXFactory::FactoryCreateFile(UClass* Class, UObject* Parent, FName N
 	for (auto i = 0; i < Data.Materials.Num(); i++)
 	{
 		auto PskMaterial = Data.Materials[i];
-		auto MaterialAdd = FActorXUtils::LocalFindOrCreate<UMaterialInstanceConstant>(UMaterialInstanceConstant::StaticClass(), Parent, PskMaterial.MaterialName, Flags);
+		auto MaterialAdd = FActorXUtils::LocalFindOrCreate<UMaterial>(UMaterial::StaticClass(), Parent, PskMaterial.MaterialName, Flags);
 		StaticMesh->GetStaticMaterials().Add(FStaticMaterial(MaterialAdd));
 		StaticMesh->GetSectionInfoMap().Set(0, i, FMeshSectionInfo(i));
 	}

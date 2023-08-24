@@ -93,20 +93,22 @@ UObject* UPSKFactory::FactoryCreateFile(UClass* Class, UObject* Parent, FName Na
 	}
 
 	TArray<FString> AddedBoneNames;
-	for (auto PskBone : Data.Bones)
+	for (auto i = 0; i < Data.Bones.Num(); i++)
 	{
 		SkeletalMeshImportData::FBone Bone;
-		Bone.Name = PskBone.Name;
+		Bone.Name = Data.Bones[i].Name;
 		if (AddedBoneNames.Contains(Bone.Name)) continue;
+		AddedBoneNames.Add(Bone.Name);
 		
-		Bone.NumChildren = PskBone.NumChildren;
-		Bone.ParentIndex = PskBone.ParentIndex == -1 ? INDEX_NONE : PskBone.ParentIndex;
+		Bone.NumChildren = Data.Bones[i].NumChildren;
 		
-		auto PskBonePos = PskBone.BonePos;
+		Bone.ParentIndex = (i > 0) ? Data.Bones[i].ParentIndex : INDEX_NONE;
+		auto PskBonePos = Data.Bones[i].BonePos;
+		
 		FTransform3f PskTransform;
 		PskTransform.SetLocation(FVector3f(PskBonePos.Position.X, -PskBonePos.Position.Y, PskBonePos.Position.Z));
-		PskTransform.SetRotation(FQuat4f(PskBonePos.Orientation.X, -PskBonePos.Orientation.Y, PskBonePos.Orientation.Z, PskBonePos.Orientation.W).GetNormalized());
-
+		PskTransform.SetRotation(FQuat4f(-PskBonePos.Orientation.X, PskBonePos.Orientation.Y, -PskBonePos.Orientation.Z, (Bone.ParentIndex == INDEX_NONE) ? PskBonePos.Orientation.W : -PskBonePos.Orientation.W).GetNormalized());
+		
 		SkeletalMeshImportData::FJointPos BonePos;
 		BonePos.Transform = PskTransform;
 		BonePos.Length = PskBonePos.Length;
@@ -132,7 +134,7 @@ UObject* UPSKFactory::FactoryCreateFile(UClass* Class, UObject* Parent, FName Na
 	{
 		SkeletalMeshImportData::FMaterial Material;
 		Material.MaterialImportName = PskMaterial.MaterialName;
-		auto MaterialAdd = FActorXUtils::LocalFindOrCreate<UMaterialInstanceConstant>(UMaterialInstanceConstant::StaticClass(), Parent, PskMaterial.MaterialName, Flags);
+		auto MaterialAdd = FActorXUtils::LocalFindOrCreate<UMaterial>(UMaterial::StaticClass(), Parent, PskMaterial.MaterialName, Flags);
 		Material.Material = MaterialAdd;
 		SkeletalMeshImportData.Materials.Add(Material);
 	}
@@ -187,7 +189,7 @@ UObject* UPSKFactory::FactoryCreateFile(UClass* Class, UObject* Parent, FName Na
 
 	SkeletalMesh->SaveLODImportedData(0, SkeletalMeshImportData);
 	FSkeletalMeshBuildSettings BuildOptions;
-	BuildOptions.bRemoveDegenerates = true;
+	BuildOptions.bRemoveDegenerates = false;
 	BuildOptions.bRecomputeNormals = !Data.bHasVertexNormals;
 	BuildOptions.bRecomputeTangents = true;
 	BuildOptions.bUseMikkTSpace = true;
@@ -220,6 +222,8 @@ UObject* UPSKFactory::FactoryCreateFile(UClass* Class, UObject* Parent, FName Na
 	Skeleton->PostEditChange();
 	FAssetRegistryModule::AssetCreated(Skeleton);
 	Skeleton->MarkPackageDirty();
+
+	FGlobalComponentReregisterContext RecreateComponents;
 
 	return SkeletalMesh;
 }

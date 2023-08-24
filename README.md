@@ -2,8 +2,6 @@
 
 An ActorX .psk/.pskx/.psa importer for Unreal Engine 5
 
-> ⚠️ UnrealPSKPSA currently does not support skeletal meshes exported from [Umodel](https://github.com/gildor2/UEViewer), use [Fmodel](https://github.com/4sval/FModel) for export
-
 ## 🔧 Installation & Usage
 1. **Download main branch from [here](https://github.com/KaiserM21/UnrealPSKPSA/archive/refs/heads/master.zip)**
 2. Create a "Plugins" folder in your **(c++ ready)** project
