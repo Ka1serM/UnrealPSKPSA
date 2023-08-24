@@ -1,20 +1,24 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
-#include "PSKFactory.h"
-
-#include "ActorXUtils.h"
+#include "Factories/PSKFactory.h"
+#include "Utils/ActorXUtils.h"
 #include "IMeshBuilderModule.h"
-#include "MeshDescription.h"
-#include "PSKReader.h"
+#include "Readers/PSKReader.h"
 #include "AssetRegistry/AssetRegistryModule.h"
-#include "ImportUtils/SkeletalMeshImportUtils.h"
-#include "Materials/MaterialInstanceConstant.h"
+#include "Engine/SkinnedAssetCommon.h"
 #include "Rendering/SkeletalMeshLODModel.h"
 #include "Rendering/SkeletalMeshModel.h"
 
+UPSKFactory::UPSKFactory( const FObjectInitializer& ObjectInitializer )
+	: Super(ObjectInitializer)
+{
+	Formats.Add(TEXT("psk;PSK Skeletal Mesh File"));
+	SupportedClass = USkeletalMesh::StaticClass();
+	bCreateNew = false;
+	bEditorImport = true;
+}
 
-UObject* UPSKFactory::Import(const FString Filename, UObject* Parent, const FName Name, const EObjectFlags Flags) const
+UObject* UPSKFactory::FactoryCreateFile(UClass* Class, UObject* Parent, FName Name, EObjectFlags Flags, const FString& Filename, const TCHAR* Params, FFeedbackContext* Warn, bool& bOutOperationCanceled)
 {
 	auto Psk = PSKReader(Filename);
 	if (!Psk.Read()) return nullptr;

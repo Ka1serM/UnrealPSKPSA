@@ -1,11 +1,14 @@
 # <img src=https://github.com/KaiserM21/UnrealPSKPSA/blob/master/Resources/Icon128.png alt="Logo" width="26"> **UnrealPSKPSA**
-Unreal Engine 5 plugin for importing .psk/pskx model & .psa animation files
+
+An ActorX .psk/.pskx/.psa importer for Unreal Engine 5
+
+> ⚠️ UnrealPSKPSA currently does not support skeletal meshes exported from [Umodel](https://github.com/gildor2/UEViewer), use [Fmodel](https://github.com/4sval/FModel) for export
 
 ## 🔧 Installation & Usage
-1. **Download Main Branch (https://github.com/KaiserM21/UnrealPSKPSA/archive/refs/heads/master.zip)**
+1. **Download main branch from [here](https://github.com/KaiserM21/UnrealPSKPSA/archive/refs/heads/master.zip)**
 2. Create a "Plugins" folder in your **(c++ ready)** project
 3. Drag "UnrealPSKPSA" folder from the .zip file and put it in your **unreal project's** "Plugins" folder
-4. If asked to, rebuild your unreal project in visual studio
+4. If your project cant be compiled automatically (message), rebuild it in visual studio
 
 ## Credits
 - https://github.com/halfuwu (majority of the importer)

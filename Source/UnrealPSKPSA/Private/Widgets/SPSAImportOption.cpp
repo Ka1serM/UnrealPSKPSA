@@ -1,15 +1,12 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
-#include "SPSAImportOption.h"
-#include "ObjectEditorUtils.h"
+#include "Widgets/SPSAImportOption.h"
 #include "SPrimaryButton.h"
-#include "PSAImportOptions.h"
+#include "Widgets/PSAImportOptions.h"
 #include "SlateOptMacros.h"
 
-
-#define LOCTEXT_NAMESPACE "PSAImportFac"
 BEGIN_SLATE_FUNCTION_BUILD_OPTIMIZATION
+
 void SPSAImportOption::Construct(const FArguments& InArgs)
 {
 	WidgetWindow = InArgs._WidgetWindow;
@@ -24,7 +21,6 @@ void SPSAImportOption::Construct(const FArguments& InArgs)
 	Stun = Cast<UPSAImportOptions>(Container);
 	Details->SetObject(Container);
 	Details->SetEnabled(true);
-
 
 	this->ChildSlot
 		[
@@ -66,7 +62,7 @@ void SPSAImportOption::Construct(const FArguments& InArgs)
 		    .Padding(2)
 		[
 			SNew(SPrimaryButton)
-			.Text(LOCTEXT("Import", "Apply"))
+			.Text(FText::FromString(TEXT("Apply")))
 		    .OnClicked(this, &SPSAImportOption::OnImport)
 		]
 	+ SHorizontalBox::Slot()
@@ -74,7 +70,7 @@ void SPSAImportOption::Construct(const FArguments& InArgs)
 		.Padding(2)
 		[
 			SNew(SButton)
-			.Text(LOCTEXT("ImportAll", "Apply to All"))
+			.Text(FText::FromString(TEXT("Apply to All")))
 		.OnClicked(this, &SPSAImportOption::OnImportAll)
 		]
 	+ SHorizontalBox::Slot()
@@ -82,7 +78,7 @@ void SPSAImportOption::Construct(const FArguments& InArgs)
 		.Padding(2)
 		[
 			SNew(SButton)
-			.Text(LOCTEXT("Cancel", "Cancel"))
+			.Text(FText::FromString(TEXT("Cancel")))
 		.OnClicked(this, &SPSAImportOption::OnCancel)
 		]
 		]

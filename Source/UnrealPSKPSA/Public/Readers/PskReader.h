@@ -1,8 +1,5 @@
 ﻿#pragma once
-
 #include <fstream>
-
-#include "RawMesh.h"
 
 #define CHUNK(ChunkName) (strncmp(Chunk.ChunkID, ChunkName, strlen(ChunkName)) == 0)
 

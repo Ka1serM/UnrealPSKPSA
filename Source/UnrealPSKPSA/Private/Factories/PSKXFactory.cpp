@@ -1,9 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
-#include "PSKXFactory.h"
-#include "ActorXUtils.h"
-#include "PSKReader.h"
+#include "Factories/PSKXFactory.h"
+#include "Readers/PSKReader.h"
 #include "RawMesh.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Materials/MaterialInstanceConstant.h"
@@ -11,10 +9,17 @@
 #include "EditorAssetLibrary.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
-#include "Misc/FileHelper.h"
-#include "Materials/MaterialInstanceConstant.h"
 
-UObject* UPSKXFactory::Import(const FString Filename, UObject* Parent, const FName Name, const EObjectFlags Flags) const
+UPSKXFactory::UPSKXFactory( const FObjectInitializer& ObjectInitializer )
+	: Super(ObjectInitializer)
+{
+	Formats.Add(TEXT("pskx;PSKX Static Mesh File"));
+	SupportedClass = UStaticMesh::StaticClass();
+	bCreateNew = false;
+	bEditorImport = true;
+}
+
+UObject* UPSKXFactory::FactoryCreateFile(UClass* Class, UObject* Parent, FName Name, EObjectFlags Flags, const FString& Filename, const TCHAR* Params, FFeedbackContext* Warn, bool& bOutOperationCanceled)
 {
 	const auto Reader = new PSKReader(Filename);
 	if (!Reader->Read())

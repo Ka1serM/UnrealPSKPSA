@@ -1,7 +1,4 @@
-#include "PSKReader.h"
-
-#include "ActorXUtils.h"
-
+#include "Readers/PSKReader.h"
 
 PSKReader::PSKReader(const FString Filename)
 {
