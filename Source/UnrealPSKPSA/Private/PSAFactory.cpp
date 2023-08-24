@@ -2,16 +2,11 @@
 
 
 #include "PSAFactory.h"
-
-#include "EditorAssetLibrary.h"
 #include "PSAImportOptions.h"
 #include "PSAReader.h"
 #include "SPSAImportOption.h"
 #include "AssetRegistry/AssetRegistryModule.h"
-#include "Engine/SkeletalMeshSocket.h"
 #include "Misc/ScopedSlowTask.h"
-#include "Rendering/SkeletalMeshLODImporterData.h"
-
 
 
 
@@ -19,8 +14,7 @@ UObject* UPSAFactory::Import(const FString Filename, UObject* Parent, const FNam
 {
 	auto Psa = PSAReader(Filename);
 	if (!Psa.Read()) return nullptr;
-	//
-	bool ks = IsAutomatedImport();
+	
 	if (SettingsImporter->bInitialized == false)
 	{
 		TSharedPtr<SPSAImportOption> ImportOptionsWindow;
@@ -30,7 +24,6 @@ UObject* UPSAFactory::Import(const FString Filename, UObject* Parent, const FNam
 			IMainFrameModule& MainFrame = FModuleManager::LoadModuleChecked<IMainFrameModule>("MainFrame");
 			ParentWindow = MainFrame.GetParentWindow();
 		}
-
 		TSharedRef<SWindow> Window = SNew(SWindow)
 			.Title(LOCTEXT("DatasmithImportSettingsTitle", "PSA Import Options"))
 			.SizingRule(ESizingRule::Autosized);
@@ -46,19 +39,19 @@ UObject* UPSAFactory::Import(const FString Filename, UObject* Parent, const FNam
 		SettingsImporter->bInitialized = true;
 	}
 
-	auto AnimSequence = NewObject<UAnimSequence>(Parent, UAnimSequence::StaticClass(), Name, Flags);
+	UAnimSequence* AnimSequence = NewObject<UAnimSequence>(Parent, UAnimSequence::StaticClass(), Name, Flags);
 	USkeleton* Skeleton = SettingsImporter->Skeleton;
-	USkeletalMesh* SkeletalMesh = Skeleton->GetPreviewMesh();
-
 	AnimSequence->SetSkeleton(Skeleton);
-	AnimSequence->CreateAnimation(SkeletalMesh);
-	auto MeshBones = Skeleton->GetReferenceSkeleton().GetRawRefBoneInfo();
-
-	auto& AnimController = AnimSequence->GetController();
-
+	
+	AnimSequence->GetController().OpenBracket(LOCTEXT("ImportAnimation_Bracket", "Importing Animation"));
+	AnimSequence->GetController().InitializeModel();
+	AnimSequence->ResetAnimation();
+	
 	auto Info = Psa.AnimInfo;
-	AnimController.SetFrameRate(FFrameRate(Info.AnimRate, 1));
-	AnimController.SetPlayLength(Info.NumRawFrames/Info.AnimRate);
+	
+	AnimSequence->GetController().SetFrameRate(FFrameRate(Info.AnimRate, 1));
+	AnimSequence->GetController().SetNumberOfFrames(FFrameNumber(Info.NumRawFrames));
+
 	
 	FScopedSlowTask ImportTask(Psa.Bones.Num(), FText::FromString("Importing Anim"));
 	ImportTask.MakeDialog(false);
@@ -81,27 +74,25 @@ UObject* UPSAFactory::Import(const FString Filename, UObject* Parent, const FNam
 			PositionalKeys.Add(FVector3f(AnimKey.Position.X, -AnimKey.Position.Y, AnimKey.Position.Z));
 			RotationalKeys.Add(FQuat4f(-AnimKey.Orientation.X, AnimKey.Orientation.Y, -AnimKey.Orientation.Z, (BoneIndex == 0) ? AnimKey.Orientation.W : -AnimKey.Orientation.W).GetNormalized());
 			ScaleKeys.Add(Psa.bHasScaleKeys ? Psa.ScaleKeys[KeyIndex].ScaleVector : FVector3f::OneVector);
-			//ScaleKeys.Add(FVector3f::OneVector);
+
 		}
 
-		AnimController.AddBoneTrack(BoneName);
-		AnimController.SetBoneTrackKeys(BoneName, PositionalKeys, RotationalKeys, ScaleKeys);
+		AnimSequence->GetController().AddBoneCurve(BoneName);
+		AnimSequence->GetController().SetBoneTrackKeys(BoneName, PositionalKeys, RotationalKeys, ScaleKeys);
 	}
-	AnimController.RemoveBoneTracksMissingFromSkeleton(Skeleton);
-
-	AnimSequence->Modify(true);
-	AnimSequence->PostEditChange();
-	FAssetRegistryModule::AssetCreated(AnimSequence);
-	AnimSequence->MarkPackageDirty();
-
-	for (TObjectIterator<USkeletalMeshComponent> Iter; Iter; ++Iter)
-	{
-		FComponentReregisterContext ReregisterContext(*Iter);
-	}
+	
 	if (!bImportAll)
 	{
 		SettingsImporter->bInitialized = false;
 	}
+	
+	AnimSequence->GetController().NotifyPopulated();
+	AnimSequence->GetController().CloseBracket();
+	AnimSequence->Modify(true);
+	AnimSequence->PostEditChange();
+	FAssetRegistryModule::AssetCreated(AnimSequence);
+	bool bDirty = AnimSequence->MarkPackageDirty();
+	
 	return AnimSequence;
 }
 
