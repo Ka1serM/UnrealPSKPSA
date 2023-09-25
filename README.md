@@ -7,7 +7,7 @@ An ActorX .psk/.pskx/.psa importer for Unreal Engine 5
 2. Create a "Plugins" folder in your **(c++ ready)** project
 3. Drag "UnrealPSKPSA" folder from the .zip file and put it in your **unreal project's** "Plugins" folder
 4. If your project cant be compiled automatically (message), rebuild it in visual studio
-
+5. Drag & Drop or right click->Import your .psk/.pskx/.psa files into the content browser
 ## Credits
 - https://github.com/halfuwu (majority of the importer)
 - https://github.com/djhaled (Ui & fixes)
