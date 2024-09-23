@@ -1,6 +1,6 @@
 # <img src=https://github.com/KaiserM21/UnrealPSKPSA/blob/master/Resources/Icon128.png alt="Logo" width="26"> **UnrealPSKPSA**
 
-An ActorX .psk/.pskx/.psa importer for Unreal Engine 5
+An ActorX .psk/.pskx/.psa importer for Unreal Engine 5.3
 
 ## 🔧 Installation & Usage
 1. **Download main branch from [here](https://github.com/KaiserM21/UnrealPSKPSA/archive/refs/heads/master.zip)**
